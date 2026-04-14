@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversor de Cores Profissional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="text-white">
+
+    <canvas id="bg-canvas"></canvas>
+
+    <header class="fixed top-0 left-0 w-full h-16 glass-panel z-50 flex items-center justify-between px-6">
+        <h1 class="text-xl font-bold tracking-tight">Conversor de Cores <span class="text-gray-400 font-light">Online</span></h1>
+        <button onclick="confirmClear()" class="bg-red-600 hover:bg-red-700 p-2 rounded-lg transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+        </button>
+    </header>
+
+    <main class="pt-24 pb-12 px-4 max-w-5xl mx-auto">
+        
+        <div class="glass-panel rounded-3xl p-6 lg:p-10 shadow-2xl mb-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                
+                <div class="space-y-6">
+                    <div id="picker-area">
+                        <div id="picker-cursor"></div>
+                    </div>
+                    <input type="range" id="hue-slider" min="0" max="360" value="210">
+                    
+                    <div class="pt-4">
+                        <h4 class="text-sm uppercase tracking-widest text-gray-400 mb-3">Histórico Recente</h4>
+                        <div id="history-container" class="history-scroll">
+                            </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">
+                            <label class="text-[10px] uppercase font-bold text-gray-400">HEX</label>
+                            <input type="text" id="in-hex" class="color-input w-full p-3 rounded-lg uppercase" maxlength="7">
+                        </div>
+                        <button id="btn-copy" class="mt-4 px-4 py-3 rounded-lg font-bold transition-all" style="background: var(--accent-color); color: var(--text-on-accent)">
+                            Copiar
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="text-[10px] font-bold">R</label>
+                            <input type="number" id="in-r" class="color-input w-full p-2 rounded">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold">G</label>
+                            <input type="number" id="in-g" class="color-input w-full p-2 rounded">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold">B</label>
+                            <input type="number" id="in-b" class="color-input w-full p-2 rounded">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-2">
+                        <div><label class="text-[10px]">C</label><input type="number" id="in-c" class="color-input w-full p-2 rounded text-xs"></div>
+                        <div><label class="text-[10px]">M</label><input type="number" id="in-m" class="color-input w-full p-2 rounded text-xs"></div>
+                        <div><label class="text-[10px]">Y</label><input type="number" id="in-y" class="color-input w-full p-2 rounded text-xs"></div>
+                        <div><label class="text-[10px]">K</label><input type="number" id="in-k" class="color-input w-full p-2 rounded text-xs"></div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 border-t border-gray-700 pt-4">
+                        <div><label class="text-[10px]">HSL H</label><input type="number" id="in-hsl-h" class="color-input w-full p-2 rounded"></div>
+                        <div><label class="text-[10px]">HSL S</label><input type="number" id="in-hsl-s" class="color-input w-full p-2 rounded"></div>
+                        <div><label class="text-[10px]">HSL L</label><input type="number" id="in-hsl-l" class="color-input w-full p-2 rounded"></div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <div><label class="text-[10px]">HSV H</label><input type="number" id="in-hsv-h" class="color-input w-full p-2 rounded"></div>
+                        <div><label class="text-[10px]">HSV S</label><input type="number" id="in-hsv-s" class="color-input w-full p-2 rounded"></div>
+                        <div><label class="text-[10px]">HSV V</label><input type="number" id="in-hsv-v" class="color-input w-full p-2 rounded"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <section class="mt-12">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Minhas Paletas</h2>
+                <button onclick="addPalette()" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-full font-bold transition">
+                    + Criar Paleta
+                </button>
+            </div>
+            
+            <div id="palettes-container">
+                </div>
+        </section>
+
+    </main>
+
+    <script src="color_converter.js"></script>
+    <script src="scripts.js"></script>
+</body>
+</html>
