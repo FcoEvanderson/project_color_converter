@@ -1,7 +1,7 @@
 // scripts.js
 
 let scene, camera, renderer, plane;
-let currentColor = { h: 210, s: 50, v: 50 }; // Default
+let currentColor = { h: 210, s: 50, v: 50 }; // Estado global da cor
 let palettes = JSON.parse(localStorage.getItem('color_palettes')) || [];
 let history = JSON.parse(localStorage.getItem('color_history')) || [];
 
@@ -40,11 +40,7 @@ function animate() {
     plane.rotation.z += 0.002;
     plane.position.z = Math.sin(Date.now() * 0.001) * 0.5;
     
-    // Update background color dynamic
     const rgb = ColorConverter.hsvToRgb(currentColor.h, currentColor.s, currentColor.v);
-    const compHue = ColorConverter.getComplementary(currentColor.h);
-    const compRgb = ColorConverter.hsvToRgb(compHue, currentColor.s, currentColor.v);
-    
     const colorA = new THREE.Color(`rgb(${Math.round(rgb.r)}, ${Math.round(rgb.g)}, ${Math.round(rgb.b)})`);
     scene.background = colorA;
     plane.material.color.lerp(colorA, 0.05);
@@ -52,16 +48,27 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// --- UI LOGIC ---
+// --- UI UPDATE ENGINE ---
 function updateUI(h, s, v, source = '') {
+    // Garante limites de 0-360 para H e 0-100 para S e V
+    h = (h < 0) ? 0 : (h > 360 ? 360 : h);
+    s = (s < 0) ? 0 : (s > 100 ? 100 : s);
+    v = (v < 0) ? 0 : (v > 100 ? 100 : v);
+
     currentColor = { h, s, v };
     const rgb = ColorConverter.hsvToRgb(h, s, v);
     const hex = ColorConverter.rgbToHex(rgb.r, rgb.g, rgb.b);
     const cmyk = ColorConverter.rgbToCmyk(rgb.r, rgb.g, rgb.b);
     const hsl = ColorConverter.rgbToHsl(rgb.r, rgb.g, rgb.b);
 
-    // Update Inputs
+    // Atualiza o slider de Hue se a mudança não veio dele
+    if (source !== 'hsv') {
+        document.getElementById('hue-slider').value = h;
+    }
+
+    // Atualiza Inputs de Texto
     if (source !== 'hex') document.getElementById('in-hex').value = hex;
+    
     if (source !== 'rgb') {
         document.getElementById('in-r').value = Math.round(rgb.r);
         document.getElementById('in-g').value = Math.round(rgb.g);
@@ -84,58 +91,110 @@ function updateUI(h, s, v, source = '') {
         document.getElementById('in-hsv-v').value = Math.round(v);
     }
 
-    // Dynamic Styling
+    // Estilização Dinâmica (Contraste e Cor de Destaque)
     const lum = ColorConverter.getLuminance(rgb.r, rgb.g, rgb.b);
     const textColor = lum > 0.5 ? '#000000' : '#ffffff';
     document.documentElement.style.setProperty('--accent-color', hex);
     document.documentElement.style.setProperty('--text-on-accent', textColor);
 
-    // Update Picker Visuals
+    // Atualiza Visual do Picker
     document.getElementById('picker-area').style.backgroundColor = `hsl(${h}, 100%, 50%)`;
     const cursor = document.getElementById('picker-cursor');
     cursor.style.left = s + '%';
     cursor.style.top = (100 - v) + '%';
 }
 
-// --- EVENT HANDLERS ---
+// --- INPUT EVENT LISTENERS ---
 function initEventListeners() {
-    // Hue Slider
+    // 1. Hue Slider
     document.getElementById('hue-slider').addEventListener('input', (e) => {
-        updateUI(parseInt(e.target.value), currentColor.s, currentColor.v, 'hsv');
+        updateUI(parseFloat(e.target.value), currentColor.s, currentColor.v, 'hsv');
     });
 
-    // Saturation/Value Area
+    // 2. Picker Area (Drag)
     const pickerArea = document.getElementById('picker-area');
     let isDragging = false;
-
     const handleMove = (e) => {
         if (!isDragging) return;
         const rect = pickerArea.getBoundingClientRect();
         let x = ((e.clientX - rect.left) / rect.width) * 100;
         let y = ((e.clientY - rect.top) / rect.height) * 100;
-        x = Math.max(0, Math.min(100, x));
-        y = Math.max(0, Math.min(100, y));
-        updateUI(currentColor.h, x, 100 - y, 'hsv');
+        updateUI(currentColor.h, Math.max(0, Math.min(100, x)), 100 - Math.max(0, Math.min(100, y)), 'hsv');
     };
-
     pickerArea.addEventListener('mousedown', (e) => { isDragging = true; handleMove(e); });
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', () => { 
-        if(isDragging) addToHistory(ColorConverter.rgbToHex(...Object.values(ColorConverter.hsvToRgb(currentColor.h, currentColor.s, currentColor.v))));
+        if(isDragging) addToHistory(document.getElementById('in-hex').value);
         isDragging = false; 
     });
 
-    // Copy Button
+    // 3. HEX Input
+    document.getElementById('in-hex').addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (/^#[0-9A-F]{6}$/i.test(val) || /^#[0-9A-F]{3}$/i.test(val)) {
+            const rgb = ColorConverter.hexToRgb(val);
+            const hsv = ColorConverter.rgbToHsv(rgb.r, rgb.g, rgb.b);
+            updateUI(hsv.h, hsv.s, hsv.v, 'hex');
+        }
+    });
+
+    // 4. RGB Inputs
+    ['r', 'g', 'b'].forEach(id => {
+        document.getElementById(`in-${id}`).addEventListener('input', () => {
+            const r = parseInt(document.getElementById('in-r').value) || 0;
+            const g = parseInt(document.getElementById('in-g').value) || 0;
+            const b = parseInt(document.getElementById('in-b').value) || 0;
+            const hsv = ColorConverter.rgbToHsv(r, g, b);
+            updateUI(hsv.h, hsv.s, hsv.v, 'rgb');
+        });
+    });
+
+    // 5. CMYK Inputs
+    ['c', 'm', 'y', 'k'].forEach(id => {
+        document.getElementById(`in-${id}`).addEventListener('input', () => {
+            const c = parseFloat(document.getElementById('in-c').value) || 0;
+            const m = parseFloat(document.getElementById('in-m').value) || 0;
+            const y = parseFloat(document.getElementById('in-y').value) || 0;
+            const k = parseFloat(document.getElementById('in-k').value) || 0;
+            const rgb = ColorConverter.cmykToRgb(c, m, y, k);
+            const hsv = ColorConverter.rgbToHsv(rgb.r, rgb.g, rgb.b);
+            updateUI(hsv.h, hsv.s, hsv.v, 'cmyk');
+        });
+    });
+
+    // 6. HSL Inputs
+    ['h', 's', 'l'].forEach(id => {
+        document.getElementById(`in-hsl-${id}`).addEventListener('input', () => {
+            const h = parseFloat(document.getElementById('in-hsl-h').value) || 0;
+            const s = parseFloat(document.getElementById('in-hsl-s').value) || 0;
+            const l = parseFloat(document.getElementById('in-hsl-l').value) || 0;
+            const rgb = ColorConverter.hslToRgb(h, s, l);
+            const hsv = ColorConverter.rgbToHsv(rgb.r, rgb.g, rgb.b);
+            updateUI(hsv.h, hsv.s, hsv.v, 'hsl');
+        });
+    });
+
+    // 7. HSV Inputs
+    ['h', 's', 'v'].forEach(id => {
+        document.getElementById(`in-hsv-${id}`).addEventListener('input', () => {
+            const h = parseFloat(document.getElementById('in-hsv-h').value) || 0;
+            const s = parseFloat(document.getElementById('in-hsv-s').value) || 0;
+            const v = parseFloat(document.getElementById('in-hsv-v').value) || 0;
+            updateUI(h, s, v, 'hsv');
+        });
+    });
+
+    // Botão Copiar
     document.getElementById('btn-copy').addEventListener('click', () => {
         const hex = document.getElementById('in-hex').value;
         navigator.clipboard.writeText(hex);
         const btn = document.getElementById('btn-copy');
-        const original = btn.innerText;
         btn.innerText = 'Copiado!';
-        setTimeout(() => btn.innerText = original, 1500);
+        setTimeout(() => btn.innerText = 'Copiar', 1500);
     });
 }
 
+// --- FUNÇÕES DE AUXÍLIO (HISTORY/PALETTES) ---
 function addToHistory(hex) {
     if (history[0] === hex) return;
     history.unshift(hex);
@@ -146,6 +205,7 @@ function addToHistory(hex) {
 
 function renderHistory() {
     const container = document.getElementById('history-container');
+    if(!container) return;
     container.innerHTML = history.map((hex, i) => `
         <div class="history-item" style="background: ${hex}" data-tooltip="${hex}" onclick="useColor('${hex}')">
             <div class="delete-btn" onclick="event.stopPropagation(); deleteHistoryItem(${i})">×</div>
@@ -153,10 +213,9 @@ function renderHistory() {
     `).join('');
 }
 
-function useColor(hex) {
+window.useColor = function(hex) {
     const rgb = ColorConverter.hexToRgb(hex);
     const hsv = ColorConverter.rgbToHsv(rgb.r, rgb.g, rgb.b);
-    document.getElementById('hue-slider').value = hsv.h;
     updateUI(hsv.h, hsv.s, hsv.v);
 }
 
@@ -166,18 +225,14 @@ function deleteHistoryItem(index) {
     renderHistory();
 }
 
-// --- MODAL & GLOBAL CLEAR ---
 window.confirmClear = function() {
-    if(confirm("Deseja realmente limpar todo o histórico e paletas?")) {
+    if(confirm("Limpar histórico e paletas?")) {
         localStorage.clear();
-        history = [];
-        palettes = [];
-        renderHistory();
-        renderPalettes();
+        history = []; palettes = [];
+        renderHistory(); renderPalettes();
     }
 }
 
-// --- PALETTE SYSTEM ---
 window.addPalette = function() {
     const name = prompt("Nome da paleta:") || "Minha Paleta";
     palettes.push({ name, colors: [] });
@@ -191,6 +246,7 @@ function savePalettes() {
 
 function renderPalettes() {
     const container = document.getElementById('palettes-container');
+    if(!container) return;
     container.innerHTML = palettes.map((p, pIdx) => `
         <div class="glass-panel p-4 rounded-xl mb-4">
             <div class="flex justify-between items-center mb-3">
@@ -207,11 +263,9 @@ function renderPalettes() {
             <div class="flex flex-wrap gap-2">
                 ${p.colors.map((c, cIdx) => `
                     <div class="flex flex-col items-center gap-1 group relative">
-                        <div class="w-12 h-12 rounded shadow-inner" style="background: ${c}"></div>
+                        <div class="w-12 h-12 rounded shadow-inner cursor-pointer" style="background: ${c}" onclick="useColor('${c}')"></div>
                         <span class="text-[9px]">${c}</span>
-                        <div class="absolute -top-1 -right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition">
-                             <button onclick="deleteColor(${pIdx}, ${cIdx})" class="bg-red-500 rounded-full w-4 h-4 text-[8px]">×</button>
-                        </div>
+                        <button onclick="deleteColor(${pIdx}, ${cIdx})" class="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 text-[8px] opacity-0 group-hover:opacity-100 transition">×</button>
                     </div>
                 `).join('')}
             </div>
@@ -219,12 +273,7 @@ function renderPalettes() {
     `).join('');
 }
 
-window.addColorToPalette = (idx) => {
-    const hex = document.getElementById('in-hex').value;
-    palettes[idx].colors.push(hex);
-    savePalettes();
-};
-
+window.addColorToPalette = (idx) => { palettes[idx].colors.push(document.getElementById('in-hex').value); savePalettes(); };
 window.deletePalette = (idx) => { palettes.splice(idx, 1); savePalettes(); };
 window.editPaletteName = (idx) => { 
     const n = prompt("Novo nome:", palettes[idx].name); 
@@ -234,14 +283,13 @@ window.deleteColor = (pIdx, cIdx) => { palettes[pIdx].colors.splice(cIdx, 1); sa
 
 window.exportPaletteJSON = (idx) => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(palettes[idx]));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", palettes[idx].name + ".json");
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+    const dl = document.createElement('a');
+    dl.setAttribute("href", dataStr);
+    dl.setAttribute("download", palettes[idx].name + ".json");
+    dl.click();
 };
 
-// Initialize everything
+// --- INITIALIZATION ---
 window.addEventListener('load', () => {
     initThree();
     initEventListeners();
@@ -251,7 +299,9 @@ window.addEventListener('load', () => {
 });
 
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    if(camera && renderer) {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
 });
